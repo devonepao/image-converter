@@ -16,6 +16,8 @@ const elements = {
     settingsSection: document.getElementById('settingsSection'),
     resultSection: document.getElementById('resultSection'),
     loadingOverlay: document.getElementById('loadingOverlay'),
+    errorToast: document.getElementById('errorToast'),
+    errorMessage: document.getElementById('errorMessage'),
     originalImage: document.getElementById('originalImage'),
     originalSize: document.getElementById('originalSize'),
     originalDimensions: document.getElementById('originalDimensions'),
@@ -33,8 +35,31 @@ const elements = {
 
 // Initialize App
 function init() {
+    // Check WebP support
+    checkWebPSupport();
     registerServiceWorker();
     setupEventListeners();
+    updateFooterYear();
+}
+
+// Update Footer Year
+function updateFooterYear() {
+    const footerText = document.getElementById('footerText');
+    const currentYear = new Date().getFullYear();
+    footerText.textContent = `© ${currentYear} a solvepao research product`;
+}
+
+// Check WebP Support
+function checkWebPSupport() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1;
+    canvas.height = 1;
+    
+    const supported = canvas.toDataURL('image/webp').indexOf('data:image/webp') === 0;
+    
+    if (!supported) {
+        showError('Your browser does not support WebP conversion. Please use a modern browser like Chrome, Edge, or Safari 14+.');
+    }
 }
 
 // Service Worker Registration
@@ -185,13 +210,23 @@ async function handleConvert() {
     showLoading();
     
     try {
-        // Get resize dimensions
-        const width = elements.resizeWidth.value 
-            ? parseInt(elements.resizeWidth.value) 
-            : state.originalImage.width;
-        const height = elements.resizeHeight.value 
-            ? parseInt(elements.resizeHeight.value) 
-            : state.originalImage.height;
+        // Get resize dimensions with validation
+        let width = state.originalImage.width;
+        let height = state.originalImage.height;
+        
+        if (elements.resizeWidth.value) {
+            const parsedWidth = parseInt(elements.resizeWidth.value);
+            if (parsedWidth > 0 && parsedWidth <= 10000) {
+                width = parsedWidth;
+            }
+        }
+        
+        if (elements.resizeHeight.value) {
+            const parsedHeight = parseInt(elements.resizeHeight.value);
+            if (parsedHeight > 0 && parsedHeight <= 10000) {
+                height = parsedHeight;
+            }
+        }
         
         // Convert to WebP
         const blob = await convertToWebP(state.originalImage, width, height, state.quality);
@@ -270,8 +305,9 @@ function handleDownload() {
     a.click();
     document.body.removeChild(a);
     
-    // Clean up
-    setTimeout(() => URL.revokeObjectURL(url), 100);
+    // Clean up URL after a short delay to ensure download starts
+    const CLEANUP_DELAY = 100;
+    setTimeout(() => URL.revokeObjectURL(url), CLEANUP_DELAY);
     
     // Haptic feedback
     hapticFeedback();
@@ -334,7 +370,13 @@ function hideLoading() {
 
 // Show Error
 function showError(message) {
-    alert(message);
+    elements.errorMessage.textContent = message;
+    elements.errorToast.style.display = 'block';
+    
+    // Auto-hide after 5 seconds
+    setTimeout(() => {
+        elements.errorToast.style.display = 'none';
+    }, 5000);
 }
 
 // Haptic Feedback
