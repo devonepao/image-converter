@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="description" content="Convert images to WebP format with Apple Design System">
+    <meta name="theme-color" content="#007AFF">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="Image Converter">
+    
+    <title>Image Converter - WebP</title>
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- Apple Touch Icons -->
+    <link rel="apple-touch-icon" href="icons/icon-192x192.png">
+    
+    <!-- Styles -->
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <h1 class="app-title">Image Converter</h1>
+            <p class="app-subtitle">Convert to WebP</p>
+        </header>
+
+        <!-- Main Content -->
+        <main class="app-main">
+            <!-- Upload Section -->
+            <section class="upload-section glass-card">
+                <div class="upload-area" id="uploadArea">
+                    <svg class="upload-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                    <p class="upload-text">Tap to upload image</p>
+                    <p class="upload-hint">Supports JPG, PNG, GIF, BMP, TIFF</p>
+                    <input type="file" id="fileInput" accept="image/*" hidden>
+                </div>
+            </section>
+
+            <!-- Preview Section -->
+            <section class="preview-section" id="previewSection" style="display: none;">
+                <div class="glass-card">
+                    <h2 class="section-title">Original Image</h2>
+                    <div class="image-preview">
+                        <img id="originalImage" alt="Original">
+                        <div class="image-info">
+                            <span id="originalSize"></span>
+                            <span id="originalDimensions"></span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Conversion Settings -->
+            <section class="settings-section" id="settingsSection" style="display: none;">
+                <div class="glass-card">
+                    <h2 class="section-title">Conversion Settings</h2>
+                    
+                    <div class="setting-group">
+                        <label for="quality" class="setting-label">
+                            Quality
+                            <span class="quality-value" id="qualityValue">80%</span>
+                        </label>
+                        <input type="range" id="quality" class="slider" min="1" max="100" value="80">
+                        <p class="setting-hint">Higher quality = larger file size</p>
+                    </div>
+
+                    <div class="setting-group">
+                        <label for="resize" class="setting-label">Resize (Optional)</label>
+                        <div class="resize-inputs">
+                            <input type="number" id="resizeWidth" placeholder="Width" class="input-field">
+                            <span class="resize-separator">×</span>
+                            <input type="number" id="resizeHeight" placeholder="Height" class="input-field">
+                        </div>
+                        <p class="setting-hint">Leave empty to keep original size</p>
+                    </div>
+
+                    <button id="convertButton" class="primary-button">
+                        Convert to WebP
+                    </button>
+                </div>
+            </section>
+
+            <!-- Result Section -->
+            <section class="result-section" id="resultSection" style="display: none;">
+                <div class="glass-card">
+                    <h2 class="section-title">Converted Image</h2>
+                    <div class="image-preview">
+                        <img id="convertedImage" alt="Converted">
+                        <div class="image-info success">
+                            <span id="convertedSize"></span>
+                            <span id="savings"></span>
+                        </div>
+                    </div>
+                    
+                    <div class="action-buttons">
+                        <button id="downloadButton" class="primary-button">
+                            <svg class="button-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                <polyline points="7 10 12 15 17 10"></polyline>
+                                <line x1="12" y1="15" x2="12" y2="3"></line>
+                            </svg>
+                            Download WebP
+                        </button>
+                        <button id="resetButton" class="secondary-button">
+                            Convert Another
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Loading Indicator -->
+            <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p class="loading-text">Converting...</p>
+            </div>
+            
+            <!-- Error Toast -->
+            <div class="error-toast" id="errorToast" style="display: none;">
+                <p class="error-message" id="errorMessage"></p>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p class="footer-text" id="footerText">© 2025 a solvepao research product</p>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html>
