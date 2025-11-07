@@ -234,10 +234,11 @@ async function handleConvert() {
         
         // Check if the converted image is larger than the original
         // If so, use the original file to avoid defeating the purpose of compression
-        state.usedOriginal = false;
         if (blob.size > state.originalFile.size) {
             blob = state.originalFile;
             state.usedOriginal = true;
+        } else {
+            state.usedOriginal = false;
         }
         
         state.convertedBlob = blob;
