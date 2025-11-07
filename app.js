@@ -5,7 +5,8 @@ const state = {
     originalFile: null,
     originalImage: null,
     convertedBlob: null,
-    quality: 80
+    quality: 80,
+    usedOriginal: false
 };
 
 // DOM Elements
@@ -229,7 +230,17 @@ async function handleConvert() {
         }
         
         // Convert to WebP
-        const blob = await convertToWebP(state.originalImage, width, height, state.quality);
+        let blob = await convertToWebP(state.originalImage, width, height, state.quality);
+        
+        // Check if the converted image is larger than the original
+        // If so, use the original file to avoid defeating the purpose of compression
+        if (blob.size > state.originalFile.size) {
+            blob = state.originalFile;
+            state.usedOriginal = true;
+        } else {
+            state.usedOriginal = false;
+        }
+        
         state.convertedBlob = blob;
         
         // Display result
@@ -238,8 +249,12 @@ async function handleConvert() {
         elements.convertedSize.textContent = formatFileSize(blob.size);
         
         // Calculate savings
-        const savings = ((1 - blob.size / state.originalFile.size) * 100).toFixed(1);
-        elements.savings.textContent = `${savings}% smaller`;
+        if (state.usedOriginal) {
+            elements.savings.textContent = 'Original kept (WebP was larger)';
+        } else {
+            const savings = ((1 - blob.size / state.originalFile.size) * 100).toFixed(1);
+            elements.savings.textContent = `${savings}% smaller`;
+        }
         
         // Show result section
         elements.resultSection.style.display = 'block';
@@ -298,7 +313,15 @@ function handleDownload() {
     const url = URL.createObjectURL(state.convertedBlob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = getFileName(state.originalFile.name) + '.webp';
+    
+    // Use appropriate file extension based on whether we kept the original
+    if (state.usedOriginal) {
+        // Keep the original filename if we're using the original file
+        a.download = state.originalFile.name;
+    } else {
+        // Use .webp extension for converted images
+        a.download = getFileName(state.originalFile.name) + '.webp';
+    }
     
     // Trigger download
     document.body.appendChild(a);
@@ -320,6 +343,7 @@ function handleReset() {
     state.originalImage = null;
     state.convertedBlob = null;
     state.quality = 80;
+    state.usedOriginal = false;
     
     // Reset UI
     elements.fileInput.value = '';
