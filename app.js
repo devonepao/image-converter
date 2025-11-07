@@ -5,7 +5,8 @@ const state = {
     originalFile: null,
     originalImage: null,
     convertedBlob: null,
-    quality: 80
+    quality: 80,
+    usedOriginal: false
 };
 
 // DOM Elements
@@ -233,10 +234,10 @@ async function handleConvert() {
         
         // Check if the converted image is larger than the original
         // If so, use the original file to avoid defeating the purpose of compression
-        let usedOriginal = false;
+        state.usedOriginal = false;
         if (blob.size > state.originalFile.size) {
             blob = state.originalFile;
-            usedOriginal = true;
+            state.usedOriginal = true;
         }
         
         state.convertedBlob = blob;
@@ -247,7 +248,7 @@ async function handleConvert() {
         elements.convertedSize.textContent = formatFileSize(blob.size);
         
         // Calculate savings
-        if (usedOriginal) {
+        if (state.usedOriginal) {
             elements.savings.textContent = 'Original kept (WebP was larger)';
         } else {
             const savings = ((1 - blob.size / state.originalFile.size) * 100).toFixed(1);
@@ -312,9 +313,8 @@ function handleDownload() {
     const a = document.createElement('a');
     a.href = url;
     
-    // Use appropriate file extension based on the blob type
-    const isOriginal = state.convertedBlob === state.originalFile;
-    if (isOriginal) {
+    // Use appropriate file extension based on whether we kept the original
+    if (state.usedOriginal) {
         // Keep the original filename if we're using the original file
         a.download = state.originalFile.name;
     } else {
@@ -342,6 +342,7 @@ function handleReset() {
     state.originalImage = null;
     state.convertedBlob = null;
     state.quality = 80;
+    state.usedOriginal = false;
     
     // Reset UI
     elements.fileInput.value = '';
