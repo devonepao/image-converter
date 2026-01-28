@@ -123,6 +123,16 @@ function setupEventListeners() {
     elements.resetButton.addEventListener('click', handleReset);
 }
 
+// Check if file is a valid image file (including HEIC)
+function isValidImageFile(file) {
+    if (file.type.startsWith('image/')) {
+        return true;
+    }
+    // Check for HEIC/HEIF files which may not have proper MIME type
+    const ext = file.name.toLowerCase().substring(file.name.lastIndexOf('.'));
+    return ext === '.heic' || ext === '.heif';
+}
+
 // File Selection
 function handleFileSelect(event) {
     const file = event.target.files[0];
@@ -135,7 +145,7 @@ function handleFileSelect(event) {
             showError('Please select a valid ZIP file');
         }
     } else {
-        if (file.type.startsWith('image/')) {
+        if (isValidImageFile(file)) {
             processFile(file);
         } else {
             showError('Please select a valid image file');
@@ -157,9 +167,9 @@ function switchUploadMode(mode) {
         elements.uploadText.textContent = 'Tap to upload ZIP file';
         elements.uploadHint.textContent = 'ZIP archive containing images';
     } else {
-        elements.fileInput.setAttribute('accept', 'image/*');
+        elements.fileInput.setAttribute('accept', 'image/*,.heic,.heif');
         elements.uploadText.textContent = 'Tap to upload image';
-        elements.uploadHint.textContent = 'Supports JPG, PNG, GIF, BMP, TIFF';
+        elements.uploadHint.textContent = 'Supports JPG, PNG, GIF, BMP, TIFF, HEIC';
     }
     
     // Reset if mode changed
@@ -203,7 +213,7 @@ function handleDrop(event) {
             showError('Please drop a valid ZIP file');
         }
     } else {
-        if (file.type.startsWith('image/')) {
+        if (isValidImageFile(file)) {
             processFile(file);
         } else {
             showError('Please drop a valid image file');
@@ -242,7 +252,7 @@ async function processZipFile(file) {
         state.zipImages = imageFiles;
         
         // Display preview of first image
-        const firstImage = await loadImageFromBlob(imageFiles[0].blob);
+        const firstImage = await loadImageFromBlob(imageFiles[0].blob, imageFiles[0].name);
         state.originalImage = firstImage;
         
         elements.originalImage.src = firstImage.src;
@@ -263,15 +273,41 @@ async function processZipFile(file) {
     }
 }
 
+// Check if file is HEIC format
+function isHeicFile(filename) {
+    const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    return ext === '.heic' || ext === '.heif';
+}
+
+// Convert HEIC blob to JPEG blob
+async function convertHeicToJpeg(blob) {
+    try {
+        const convertedBlob = await heic2any({
+            blob: blob,
+            toType: 'image/jpeg',
+            quality: 0.92
+        });
+        // heic2any may return an array for multi-image HEIC files
+        return Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+    } catch (error) {
+        throw new Error('Failed to convert HEIC image: ' + error.message);
+    }
+}
+
 // Check if file is an image
 function isImageFile(filename) {
-    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.heic', '.heif'];
     const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
     return imageExtensions.includes(ext);
 }
 
-// Load Image from Blob
-function loadImageFromBlob(blob) {
+// Load Image from Blob (with HEIC support)
+async function loadImageFromBlob(blob, filename = '') {
+    // Convert HEIC to JPEG if needed
+    if (isHeicFile(filename) || blob.type === 'image/heic' || blob.type === 'image/heif') {
+        blob = await convertHeicToJpeg(blob);
+    }
+    
     return new Promise((resolve, reject) => {
         const url = URL.createObjectURL(blob);
         const img = new Image();
@@ -328,8 +364,14 @@ async function processFile(file) {
     }
 }
 
-// Load Image
-function loadImage(file) {
+// Load Image (with HEIC support)
+async function loadImage(file) {
+    // Check if file is HEIC and needs conversion
+    if (isHeicFile(file.name) || file.type === 'image/heic' || file.type === 'image/heif') {
+        const convertedBlob = await convertHeicToJpeg(file);
+        return loadImageFromBlob(convertedBlob);
+    }
+    
     return new Promise((resolve, reject) => {
         const reader = new FileReader();
         
@@ -472,7 +514,7 @@ async function handleBatchConvert() {
             
             try {
                 // Load image
-                const img = await loadImageFromBlob(imageFile.blob);
+                const img = await loadImageFromBlob(imageFile.blob, imageFile.name);
                 
                 // Calculate dimensions with aspect ratio preservation
                 let width = img.width;
