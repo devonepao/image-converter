@@ -47,6 +47,8 @@ const elements = {
 function init() {
     // Check WebP support
     checkWebPSupport();
+    // Check HEIC support
+    checkHeicSupport();
     registerServiceWorker();
     setupEventListeners();
     updateFooterYear();
@@ -69,6 +71,15 @@ function checkWebPSupport() {
     
     if (!supported) {
         showError('Your browser does not support WebP conversion. Please use a modern browser like Chrome, Edge, or Safari 14+.');
+    }
+}
+
+// Check HEIC Support
+function checkHeicSupport() {
+    if (typeof heic2any === 'undefined') {
+        console.warn('HEIC conversion library not loaded. HEIC files will be skipped.');
+    } else {
+        console.log('HEIC conversion support available');
     }
 }
 
@@ -305,6 +316,13 @@ function isHeicFile(filename) {
 
 // Convert HEIC blob to JPEG blob
 async function convertHeicToJpeg(blob) {
+    // Check if heic2any library is available
+    if (typeof heic2any === 'undefined') {
+        const error = new Error('HEIC conversion library not available');
+        error.isHeicConversionError = true;
+        throw error;
+    }
+    
     try {
         const convertedBlob = await heic2any({
             blob: blob,
