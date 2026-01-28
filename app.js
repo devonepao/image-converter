@@ -277,10 +277,12 @@ function loadImageFromBlob(blob) {
         const img = new Image();
         
         img.onload = () => {
+            URL.revokeObjectURL(url); // Clean up memory
             resolve(img);
         };
         
         img.onerror = () => {
+            URL.revokeObjectURL(url); // Clean up memory even on error
             reject(new Error('Failed to load image'));
         };
         
@@ -375,21 +377,35 @@ async function handleSingleConvert() {
     showLoading('Converting image...');
     
     try {
-        // Get resize dimensions with validation
+        // Get resize dimensions with validation and aspect ratio preservation
         let width = state.originalImage.width;
         let height = state.originalImage.height;
+        const aspectRatio = width / height;
         
-        if (elements.resizeWidth.value) {
+        const hasWidth = elements.resizeWidth.value && parseInt(elements.resizeWidth.value) > 0;
+        const hasHeight = elements.resizeHeight.value && parseInt(elements.resizeHeight.value) > 0;
+        
+        if (hasWidth && hasHeight) {
+            // Both dimensions provided
+            const parsedWidth = parseInt(elements.resizeWidth.value);
+            const parsedHeight = parseInt(elements.resizeHeight.value);
+            if (parsedWidth <= 10000 && parsedHeight <= 10000) {
+                width = parsedWidth;
+                height = parsedHeight;
+            }
+        } else if (hasWidth) {
+            // Only width provided, calculate height to maintain aspect ratio
             const parsedWidth = parseInt(elements.resizeWidth.value);
             if (parsedWidth > 0 && parsedWidth <= 10000) {
                 width = parsedWidth;
+                height = Math.round(parsedWidth / aspectRatio);
             }
-        }
-        
-        if (elements.resizeHeight.value) {
+        } else if (hasHeight) {
+            // Only height provided, calculate width to maintain aspect ratio
             const parsedHeight = parseInt(elements.resizeHeight.value);
             if (parsedHeight > 0 && parsedHeight <= 10000) {
                 height = parsedHeight;
+                width = Math.round(parsedHeight * aspectRatio);
             }
         }
         
@@ -441,10 +457,13 @@ async function handleBatchConvert() {
         let totalOriginalSize = 0;
         let totalConvertedSize = 0;
         let convertedCount = 0;
+        const usedFilenames = new Set(); // Track filenames to avoid collisions
         
-        // Get resize dimensions
-        const resizeWidth = elements.resizeWidth.value ? parseInt(elements.resizeWidth.value) : null;
-        const resizeHeight = elements.resizeHeight.value ? parseInt(elements.resizeHeight.value) : null;
+        // Get resize dimensions with aspect ratio calculation
+        const hasWidth = elements.resizeWidth.value && parseInt(elements.resizeWidth.value) > 0;
+        const hasHeight = elements.resizeHeight.value && parseInt(elements.resizeHeight.value) > 0;
+        const resizeWidth = hasWidth ? parseInt(elements.resizeWidth.value) : null;
+        const resizeHeight = hasHeight ? parseInt(elements.resizeHeight.value) : null;
         
         for (let i = 0; i < state.zipImages.length; i++) {
             const imageFile = state.zipImages[i];
@@ -455,9 +474,24 @@ async function handleBatchConvert() {
                 // Load image
                 const img = await loadImageFromBlob(imageFile.blob);
                 
-                // Determine dimensions
-                let width = resizeWidth || img.width;
-                let height = resizeHeight || img.height;
+                // Calculate dimensions with aspect ratio preservation
+                let width = img.width;
+                let height = img.height;
+                const aspectRatio = width / height;
+                
+                if (resizeWidth && resizeHeight) {
+                    // Both dimensions specified
+                    width = resizeWidth;
+                    height = resizeHeight;
+                } else if (resizeWidth) {
+                    // Only width specified, maintain aspect ratio
+                    width = resizeWidth;
+                    height = Math.round(resizeWidth / aspectRatio);
+                } else if (resizeHeight) {
+                    // Only height specified, maintain aspect ratio
+                    height = resizeHeight;
+                    width = Math.round(resizeHeight * aspectRatio);
+                }
                 
                 // Convert to WebP
                 const webpBlob = await convertToWebP(img, width, height, state.quality);
@@ -478,16 +512,37 @@ async function handleBatchConvert() {
                 
                 totalOriginalSize += imageFile.size;
                 
+                // Handle filename collisions
+                let uniqueFileName = fileName;
+                let counter = 1;
+                while (usedFilenames.has(uniqueFileName)) {
+                    const baseName = getFileName(fileName);
+                    const ext = fileName.substring(fileName.lastIndexOf('.'));
+                    uniqueFileName = `${baseName}_${counter}${ext}`;
+                    counter++;
+                }
+                usedFilenames.add(uniqueFileName);
+                
                 // Add to zip
-                zip.file(fileName, finalBlob);
+                zip.file(uniqueFileName, finalBlob);
                 convertedCount++;
                 
             } catch (error) {
                 console.error(`Error converting ${imageFile.name}:`, error);
-                // Add original file on error
-                zip.file(imageFile.name, imageFile.blob);
+                // Add original file on error with unique filename
+                let uniqueFileName = imageFile.name;
+                let counter = 1;
+                while (usedFilenames.has(uniqueFileName)) {
+                    const baseName = getFileName(imageFile.name);
+                    const ext = imageFile.name.substring(imageFile.name.lastIndexOf('.'));
+                    uniqueFileName = `${baseName}_${counter}${ext}`;
+                    counter++;
+                }
+                usedFilenames.add(uniqueFileName);
+                zip.file(uniqueFileName, imageFile.blob);
                 totalConvertedSize += imageFile.size;
                 totalOriginalSize += imageFile.size;
+                convertedCount++;
             }
         }
         
@@ -632,7 +687,12 @@ function formatFileSize(bytes) {
 
 // Get File Name (without extension)
 function getFileName(filename) {
-    return filename.substring(0, filename.lastIndexOf('.')) || filename;
+    const lastDotIndex = filename.lastIndexOf('.');
+    if (lastDotIndex <= 0) {
+        // No extension or filename starts with dot (e.g., ".gitignore")
+        return filename;
+    }
+    return filename.substring(0, lastDotIndex);
 }
 
 // Show Loading
