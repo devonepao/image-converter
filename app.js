@@ -251,8 +251,32 @@ async function processZipFile(file) {
         
         state.zipImages = imageFiles;
         
-        // Display preview of first image
-        const firstImage = await loadImageFromBlob(imageFiles[0].blob, imageFiles[0].name);
+        // Display preview of first non-HEIC image or first image that can be loaded
+        let firstImage = null;
+        let firstImageIndex = 0;
+        
+        for (let i = 0; i < imageFiles.length; i++) {
+            try {
+                firstImage = await loadImageFromBlob(imageFiles[i].blob, imageFiles[i].name);
+                firstImageIndex = i;
+                break;
+            } catch (error) {
+                // If first image is HEIC and fails, try next image
+                if (error.isHeicConversionError) {
+                    console.warn(`Skipping HEIC preview for ${imageFiles[i].name}`);
+                    continue;
+                }
+                // For other errors, throw
+                throw error;
+            }
+        }
+        
+        if (!firstImage) {
+            hideLoading();
+            showError('Could not load any images from ZIP file. HEIC format is not supported in this browser.');
+            return;
+        }
+        
         state.originalImage = firstImage;
         
         elements.originalImage.src = firstImage.src;
@@ -290,7 +314,10 @@ async function convertHeicToJpeg(blob) {
         // heic2any may return an array for multi-image HEIC files
         return Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
     } catch (error) {
-        throw new Error('Failed to convert HEIC image: ' + error.message);
+        // Create a specific error type that can be identified later
+        const heicError = new Error(error.message);
+        heicError.isHeicConversionError = true;
+        throw heicError;
     }
 }
 
@@ -308,9 +335,11 @@ async function loadImageFromBlob(blob, filename = '') {
         try {
             blob = await convertHeicToJpeg(blob);
         } catch (error) {
-            // If HEIC conversion fails, throw a more specific error
-            // This will be caught by the caller and the file will be skipped or handled appropriately
-            throw new Error('HEIC_CONVERSION_FAILED: ' + error.message);
+            // Preserve the HEIC error flag for batch processing
+            if (!error.isHeicConversionError) {
+                error.isHeicConversionError = true;
+            }
+            throw error;
         }
     }
     
@@ -586,8 +615,8 @@ async function handleBatchConvert() {
             } catch (error) {
                 console.error(`Error converting ${imageFile.name}:`, error);
                 
-                // Check if this is a HEIC conversion error
-                const isHeicError = error.message && error.message.includes('HEIC_CONVERSION_FAILED');
+                // Check if this is a HEIC conversion error using the error flag
+                const isHeicError = error.isHeicConversionError === true;
                 
                 if (isHeicError) {
                     // Skip HEIC files that can't be converted
@@ -648,12 +677,9 @@ async function handleBatchConvert() {
         
         hideLoading();
         
-        // Show informational message if HEIC files were skipped
+        // Log informational message if HEIC files were skipped
         if (skippedHeicCount > 0) {
-            // Using setTimeout to show the message after the result section is displayed
-            setTimeout(() => {
-                console.warn(`${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's were' : ' was'} skipped - HEIC format not supported in this browser`);
-            }, 100);
+            console.warn(`${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's were' : ' was'} skipped - HEIC format not supported in this browser`);
         }
         
         hapticFeedback();
