@@ -6,7 +6,10 @@ const state = {
     originalImage: null,
     convertedBlob: null,
     quality: 80,
-    usedOriginal: false
+    usedOriginal: false,
+    uploadMode: 'single', // 'single' or 'zip'
+    zipImages: [], // Array of images from zip file
+    zipFileName: ''
 };
 
 // DOM Elements
@@ -17,6 +20,8 @@ const elements = {
     settingsSection: document.getElementById('settingsSection'),
     resultSection: document.getElementById('resultSection'),
     loadingOverlay: document.getElementById('loadingOverlay'),
+    loadingText: document.getElementById('loadingText'),
+    loadingProgress: document.getElementById('loadingProgress'),
     errorToast: document.getElementById('errorToast'),
     errorMessage: document.getElementById('errorMessage'),
     originalImage: document.getElementById('originalImage'),
@@ -31,7 +36,11 @@ const elements = {
     convertedSize: document.getElementById('convertedSize'),
     savings: document.getElementById('savings'),
     downloadButton: document.getElementById('downloadButton'),
-    resetButton: document.getElementById('resetButton')
+    resetButton: document.getElementById('resetButton'),
+    singleModeBtn: document.getElementById('singleModeBtn'),
+    zipModeBtn: document.getElementById('zipModeBtn'),
+    uploadText: document.getElementById('uploadText'),
+    uploadHint: document.getElementById('uploadHint')
 };
 
 // Initialize App
@@ -77,6 +86,10 @@ async function registerServiceWorker() {
 
 // Event Listeners
 function setupEventListeners() {
+    // Upload mode selection
+    elements.singleModeBtn.addEventListener('click', () => switchUploadMode('single'));
+    elements.zipModeBtn.addEventListener('click', () => switchUploadMode('zip'));
+    
     // Upload area click
     elements.uploadArea.addEventListener('click', () => {
         elements.fileInput.click();
@@ -92,6 +105,14 @@ function setupEventListeners() {
     // Quality slider
     elements.quality.addEventListener('input', handleQualityChange);
     
+    // Preset buttons
+    document.querySelectorAll('.preset-button').forEach(button => {
+        button.addEventListener('click', (e) => {
+            const quality = parseInt(e.currentTarget.dataset.quality);
+            handlePresetClick(quality);
+        });
+    });
+    
     // Convert button
     elements.convertButton.addEventListener('click', handleConvert);
     
@@ -105,11 +126,58 @@ function setupEventListeners() {
 // File Selection
 function handleFileSelect(event) {
     const file = event.target.files[0];
-    if (file && file.type.startsWith('image/')) {
-        processFile(file);
+    if (!file) return;
+    
+    if (state.uploadMode === 'zip') {
+        if (file.type === 'application/zip' || file.name.endsWith('.zip')) {
+            processZipFile(file);
+        } else {
+            showError('Please select a valid ZIP file');
+        }
     } else {
-        showError('Please select a valid image file');
+        if (file.type.startsWith('image/')) {
+            processFile(file);
+        } else {
+            showError('Please select a valid image file');
+        }
     }
+}
+
+// Switch Upload Mode
+function switchUploadMode(mode) {
+    state.uploadMode = mode;
+    
+    // Update button states
+    elements.singleModeBtn.classList.toggle('active', mode === 'single');
+    elements.zipModeBtn.classList.toggle('active', mode === 'zip');
+    
+    // Update file input accept attribute
+    if (mode === 'zip') {
+        elements.fileInput.setAttribute('accept', '.zip,application/zip');
+        elements.uploadText.textContent = 'Tap to upload ZIP file';
+        elements.uploadHint.textContent = 'ZIP archive containing images';
+    } else {
+        elements.fileInput.setAttribute('accept', 'image/*');
+        elements.uploadText.textContent = 'Tap to upload image';
+        elements.uploadHint.textContent = 'Supports JPG, PNG, GIF, BMP, TIFF';
+    }
+    
+    // Reset if mode changed
+    handleReset();
+}
+
+// Handle Preset Click
+function handlePresetClick(quality) {
+    state.quality = quality;
+    elements.quality.value = quality;
+    elements.qualityValue.textContent = `${quality}%`;
+    
+    // Update preset button states
+    document.querySelectorAll('.preset-button').forEach(button => {
+        button.classList.toggle('active', parseInt(button.dataset.quality) === quality);
+    });
+    
+    hapticFeedback();
 }
 
 // Drag Over
@@ -126,11 +194,98 @@ function handleDrop(event) {
     elements.uploadArea.style.borderColor = 'var(--border-color)';
     
     const file = event.dataTransfer.files[0];
-    if (file && file.type.startsWith('image/')) {
-        processFile(file);
+    if (!file) return;
+    
+    if (state.uploadMode === 'zip') {
+        if (file.type === 'application/zip' || file.name.endsWith('.zip')) {
+            processZipFile(file);
+        } else {
+            showError('Please drop a valid ZIP file');
+        }
     } else {
-        showError('Please drop a valid image file');
+        if (file.type.startsWith('image/')) {
+            processFile(file);
+        } else {
+            showError('Please drop a valid image file');
+        }
     }
+}
+
+// Process ZIP File
+async function processZipFile(file) {
+    state.zipFileName = file.name.replace('.zip', '');
+    
+    showLoading('Extracting images from ZIP...');
+    
+    try {
+        const zip = await JSZip.loadAsync(file);
+        const imageFiles = [];
+        
+        // Filter for image files
+        for (const [filename, zipEntry] of Object.entries(zip.files)) {
+            if (!zipEntry.dir && isImageFile(filename)) {
+                const blob = await zipEntry.async('blob');
+                imageFiles.push({
+                    name: filename,
+                    blob: blob,
+                    size: blob.size
+                });
+            }
+        }
+        
+        if (imageFiles.length === 0) {
+            hideLoading();
+            showError('No images found in ZIP file');
+            return;
+        }
+        
+        state.zipImages = imageFiles;
+        
+        // Display preview of first image
+        const firstImage = await loadImageFromBlob(imageFiles[0].blob);
+        state.originalImage = firstImage;
+        
+        elements.originalImage.src = firstImage.src;
+        elements.originalSize.textContent = `${imageFiles.length} images (${formatFileSize(file.size)} total)`;
+        elements.originalDimensions.textContent = `First: ${firstImage.width} × ${firstImage.height}`;
+        
+        // Show sections
+        elements.previewSection.style.display = 'block';
+        elements.settingsSection.style.display = 'block';
+        elements.resultSection.style.display = 'none';
+        
+        hideLoading();
+        hapticFeedback();
+        
+    } catch (error) {
+        hideLoading();
+        showError('Error processing ZIP file: ' + error.message);
+    }
+}
+
+// Check if file is an image
+function isImageFile(filename) {
+    const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp'];
+    const ext = filename.toLowerCase().substring(filename.lastIndexOf('.'));
+    return imageExtensions.includes(ext);
+}
+
+// Load Image from Blob
+function loadImageFromBlob(blob) {
+    return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(blob);
+        const img = new Image();
+        
+        img.onload = () => {
+            resolve(img);
+        };
+        
+        img.onerror = () => {
+            reject(new Error('Failed to load image'));
+        };
+        
+        img.src = url;
+    });
 }
 
 // Process File
@@ -208,7 +363,16 @@ function handleQualityChange(event) {
 async function handleConvert() {
     if (!state.originalImage) return;
     
-    showLoading();
+    if (state.uploadMode === 'zip' && state.zipImages.length > 0) {
+        await handleBatchConvert();
+    } else {
+        await handleSingleConvert();
+    }
+}
+
+// Handle Single Image Convert
+async function handleSingleConvert() {
+    showLoading('Converting image...');
     
     try {
         // Get resize dimensions with validation
@@ -233,7 +397,6 @@ async function handleConvert() {
         let blob = await convertToWebP(state.originalImage, width, height, state.quality);
         
         // Check if the converted image is larger than the original
-        // If so, use the original file to avoid defeating the purpose of compression
         if (blob.size > state.originalFile.size) {
             blob = state.originalFile;
             state.usedOriginal = true;
@@ -258,19 +421,100 @@ async function handleConvert() {
         
         // Show result section
         elements.resultSection.style.display = 'block';
-        
-        // Scroll to result
         elements.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
-        // Hide loading
         hideLoading();
-        
-        // Haptic feedback
         hapticFeedback();
         
     } catch (error) {
         hideLoading();
         showError('Error converting image: ' + error.message);
+    }
+}
+
+// Handle Batch Convert
+async function handleBatchConvert() {
+    showLoading('Converting images...', '0 / ' + state.zipImages.length);
+    
+    try {
+        const zip = new JSZip();
+        let totalOriginalSize = 0;
+        let totalConvertedSize = 0;
+        let convertedCount = 0;
+        
+        // Get resize dimensions
+        const resizeWidth = elements.resizeWidth.value ? parseInt(elements.resizeWidth.value) : null;
+        const resizeHeight = elements.resizeHeight.value ? parseInt(elements.resizeHeight.value) : null;
+        
+        for (let i = 0; i < state.zipImages.length; i++) {
+            const imageFile = state.zipImages[i];
+            
+            updateLoadingProgress(`${i + 1} / ${state.zipImages.length}`);
+            
+            try {
+                // Load image
+                const img = await loadImageFromBlob(imageFile.blob);
+                
+                // Determine dimensions
+                let width = resizeWidth || img.width;
+                let height = resizeHeight || img.height;
+                
+                // Convert to WebP
+                const webpBlob = await convertToWebP(img, width, height, state.quality);
+                
+                // Use smaller file
+                let finalBlob = webpBlob;
+                let fileName = imageFile.name;
+                
+                if (webpBlob.size < imageFile.size) {
+                    // WebP is smaller, use it
+                    fileName = getFileName(imageFile.name) + '.webp';
+                    totalConvertedSize += webpBlob.size;
+                } else {
+                    // Original is smaller, keep it
+                    finalBlob = imageFile.blob;
+                    totalConvertedSize += imageFile.size;
+                }
+                
+                totalOriginalSize += imageFile.size;
+                
+                // Add to zip
+                zip.file(fileName, finalBlob);
+                convertedCount++;
+                
+            } catch (error) {
+                console.error(`Error converting ${imageFile.name}:`, error);
+                // Add original file on error
+                zip.file(imageFile.name, imageFile.blob);
+                totalConvertedSize += imageFile.size;
+                totalOriginalSize += imageFile.size;
+            }
+        }
+        
+        // Generate ZIP
+        updateLoadingProgress('Creating ZIP file...');
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        state.convertedBlob = zipBlob;
+        
+        // Display result
+        const url = URL.createObjectURL(zipBlob);
+        elements.convertedImage.src = state.originalImage.src; // Show first image as preview
+        elements.convertedSize.textContent = `${convertedCount} images (${formatFileSize(zipBlob.size)})`;
+        
+        // Calculate savings
+        const savings = ((1 - totalConvertedSize / totalOriginalSize) * 100).toFixed(1);
+        elements.savings.textContent = `${savings}% total size reduction`;
+        
+        // Show result section
+        elements.resultSection.style.display = 'block';
+        elements.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        
+        hideLoading();
+        hapticFeedback();
+        
+    } catch (error) {
+        hideLoading();
+        showError('Error processing batch conversion: ' + error.message);
     }
 }
 
@@ -314,8 +558,10 @@ function handleDownload() {
     const a = document.createElement('a');
     a.href = url;
     
-    // Use appropriate file extension based on whether we kept the original
-    if (state.usedOriginal) {
+    // Set filename based on mode
+    if (state.uploadMode === 'zip') {
+        a.download = state.zipFileName + '_converted.zip';
+    } else if (state.usedOriginal) {
         // Keep the original filename if we're using the original file
         a.download = state.originalFile.name;
     } else {
@@ -344,6 +590,8 @@ function handleReset() {
     state.convertedBlob = null;
     state.quality = 80;
     state.usedOriginal = false;
+    state.zipImages = [];
+    state.zipFileName = '';
     
     // Reset UI
     elements.fileInput.value = '';
@@ -351,6 +599,11 @@ function handleReset() {
     elements.qualityValue.textContent = '80%';
     elements.resizeWidth.value = '';
     elements.resizeHeight.value = '';
+    
+    // Reset preset buttons
+    document.querySelectorAll('.preset-button').forEach(button => {
+        button.classList.toggle('active', parseInt(button.dataset.quality) === 80);
+    });
     
     // Hide sections
     elements.previewSection.style.display = 'none';
@@ -383,13 +636,20 @@ function getFileName(filename) {
 }
 
 // Show Loading
-function showLoading() {
+function showLoading(text = 'Converting...', progress = '') {
     elements.loadingOverlay.style.display = 'flex';
+    elements.loadingText.textContent = text;
+    elements.loadingProgress.textContent = progress;
 }
 
 // Hide Loading
 function hideLoading() {
     elements.loadingOverlay.style.display = 'none';
+}
+
+// Update Loading Progress
+function updateLoadingProgress(progress) {
+    elements.loadingProgress.textContent = progress;
 }
 
 // Show Error
