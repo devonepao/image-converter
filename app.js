@@ -378,6 +378,8 @@ async function loadImage(file) {
             const convertedBlob = await convertHeicToJpeg(file);
             return loadImageFromBlob(convertedBlob);
         } catch (error) {
+            // Log the original error for debugging
+            console.error('HEIC conversion failed:', error);
             // If HEIC conversion fails, provide a helpful error message
             throw new Error('Cannot convert HEIC image - HEIC format is not supported in this browser. Please convert the image to JPG or PNG first.');
         }
@@ -591,7 +593,7 @@ async function handleBatchConvert() {
                     // Skip HEIC files that can't be converted
                     console.warn(`Skipping HEIC file ${imageFile.name} - HEIC format not supported in this browser`);
                     skippedHeicCount++;
-                    totalOriginalSize += imageFile.size;
+                    // Don't include skipped files in size calculations
                 } else {
                     // For other errors, add original file with unique filename
                     let uniqueFileName = imageFile.name;
@@ -611,6 +613,17 @@ async function handleBatchConvert() {
             }
         }
         
+        // Check if no files were successfully converted
+        if (convertedCount === 0) {
+            hideLoading();
+            if (skippedHeicCount > 0) {
+                showError('No images could be converted. All HEIC files were skipped because HEIC format is not supported in this browser. Please convert HEIC files to JPG or PNG before uploading.');
+            } else {
+                showError('No images could be converted from the ZIP file.');
+            }
+            return;
+        }
+        
         // Generate ZIP
         updateLoadingProgress('Creating ZIP file...');
         const zipBlob = await zip.generateAsync({ type: 'blob' });
@@ -622,7 +635,7 @@ async function handleBatchConvert() {
         elements.convertedSize.textContent = `${convertedCount} images (${formatFileSize(zipBlob.size)})`;
         
         // Calculate savings
-        const savings = ((1 - totalConvertedSize / totalOriginalSize) * 100).toFixed(1);
+        const savings = totalOriginalSize > 0 ? ((1 - totalConvertedSize / totalOriginalSize) * 100).toFixed(1) : '0.0';
         let savingsText = `${savings}% total size reduction`;
         if (skippedHeicCount > 0) {
             savingsText += ` (${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's' : ''} skipped)`;
@@ -635,9 +648,12 @@ async function handleBatchConvert() {
         
         hideLoading();
         
-        // Show warning if HEIC files were skipped
+        // Show informational message if HEIC files were skipped
         if (skippedHeicCount > 0) {
-            showError(`Note: ${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's were' : ' was'} skipped because HEIC format is not supported in this browser. Other images were converted successfully.`);
+            // Using setTimeout to show the message after the result section is displayed
+            setTimeout(() => {
+                console.warn(`${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's were' : ' was'} skipped - HEIC format not supported in this browser`);
+            }, 100);
         }
         
         hapticFeedback();
