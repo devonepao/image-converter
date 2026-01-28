@@ -305,7 +305,13 @@ function isImageFile(filename) {
 async function loadImageFromBlob(blob, filename = '') {
     // Convert HEIC to JPEG if needed
     if (isHeicFile(filename) || blob.type === 'image/heic' || blob.type === 'image/heif') {
-        blob = await convertHeicToJpeg(blob);
+        try {
+            blob = await convertHeicToJpeg(blob);
+        } catch (error) {
+            // If HEIC conversion fails, throw a more specific error
+            // This will be caught by the caller and the file will be skipped or handled appropriately
+            throw new Error('HEIC_CONVERSION_FAILED: ' + error.message);
+        }
     }
     
     return new Promise((resolve, reject) => {
@@ -368,8 +374,13 @@ async function processFile(file) {
 async function loadImage(file) {
     // Check if file is HEIC and needs conversion
     if (isHeicFile(file.name) || file.type === 'image/heic' || file.type === 'image/heif') {
-        const convertedBlob = await convertHeicToJpeg(file);
-        return loadImageFromBlob(convertedBlob);
+        try {
+            const convertedBlob = await convertHeicToJpeg(file);
+            return loadImageFromBlob(convertedBlob);
+        } catch (error) {
+            // If HEIC conversion fails, provide a helpful error message
+            throw new Error('Cannot convert HEIC image - HEIC format is not supported in this browser. Please convert the image to JPG or PNG first.');
+        }
     }
     
     return new Promise((resolve, reject) => {
@@ -499,6 +510,7 @@ async function handleBatchConvert() {
         let totalOriginalSize = 0;
         let totalConvertedSize = 0;
         let convertedCount = 0;
+        let skippedHeicCount = 0;
         const usedFilenames = new Set(); // Track filenames to avoid collisions
         
         // Get resize dimensions with aspect ratio calculation
@@ -571,20 +583,31 @@ async function handleBatchConvert() {
                 
             } catch (error) {
                 console.error(`Error converting ${imageFile.name}:`, error);
-                // Add original file on error with unique filename
-                let uniqueFileName = imageFile.name;
-                let counter = 1;
-                while (usedFilenames.has(uniqueFileName)) {
-                    const baseName = getFileName(imageFile.name);
-                    const ext = imageFile.name.substring(imageFile.name.lastIndexOf('.'));
-                    uniqueFileName = `${baseName}_${counter}${ext}`;
-                    counter++;
+                
+                // Check if this is a HEIC conversion error
+                const isHeicError = error.message && error.message.includes('HEIC_CONVERSION_FAILED');
+                
+                if (isHeicError) {
+                    // Skip HEIC files that can't be converted
+                    console.warn(`Skipping HEIC file ${imageFile.name} - HEIC format not supported in this browser`);
+                    skippedHeicCount++;
+                    totalOriginalSize += imageFile.size;
+                } else {
+                    // For other errors, add original file with unique filename
+                    let uniqueFileName = imageFile.name;
+                    let counter = 1;
+                    while (usedFilenames.has(uniqueFileName)) {
+                        const baseName = getFileName(imageFile.name);
+                        const ext = imageFile.name.substring(imageFile.name.lastIndexOf('.'));
+                        uniqueFileName = `${baseName}_${counter}${ext}`;
+                        counter++;
+                    }
+                    usedFilenames.add(uniqueFileName);
+                    zip.file(uniqueFileName, imageFile.blob);
+                    totalConvertedSize += imageFile.size;
+                    totalOriginalSize += imageFile.size;
+                    convertedCount++;
                 }
-                usedFilenames.add(uniqueFileName);
-                zip.file(uniqueFileName, imageFile.blob);
-                totalConvertedSize += imageFile.size;
-                totalOriginalSize += imageFile.size;
-                convertedCount++;
             }
         }
         
@@ -600,13 +623,23 @@ async function handleBatchConvert() {
         
         // Calculate savings
         const savings = ((1 - totalConvertedSize / totalOriginalSize) * 100).toFixed(1);
-        elements.savings.textContent = `${savings}% total size reduction`;
+        let savingsText = `${savings}% total size reduction`;
+        if (skippedHeicCount > 0) {
+            savingsText += ` (${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's' : ''} skipped)`;
+        }
+        elements.savings.textContent = savingsText;
         
         // Show result section
         elements.resultSection.style.display = 'block';
         elements.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
         hideLoading();
+        
+        // Show warning if HEIC files were skipped
+        if (skippedHeicCount > 0) {
+            showError(`Note: ${skippedHeicCount} HEIC file${skippedHeicCount > 1 ? 's were' : ' was'} skipped because HEIC format is not supported in this browser. Other images were converted successfully.`);
+        }
+        
         hapticFeedback();
         
     } catch (error) {
