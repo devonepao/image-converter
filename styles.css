@@ -132,11 +132,63 @@ body {
 .section-title {
     font-size: 22px;
     font-weight: 600;
-    margin-bottom: var(--spacing-md);
+    margin-bottom: var(--spacing-xs);
     letter-spacing: -0.3px;
 }
 
+.section-description {
+    font-size: 15px;
+    color: var(--text-secondary);
+    margin-bottom: var(--spacing-lg);
+    line-height: 1.4;
+}
+
 /* Upload Section */
+.upload-mode-selector {
+    display: flex;
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-lg);
+    background: var(--background);
+    padding: 4px;
+    border-radius: var(--radius-md);
+}
+
+.mode-button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--spacing-xs);
+    padding: var(--spacing-md);
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: var(--font-system);
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.mode-button:hover {
+    background: rgba(0, 122, 255, 0.05);
+}
+
+.mode-button.active {
+    background: var(--primary-color);
+    color: white;
+}
+
+.mode-button:active {
+    transform: scale(0.98);
+}
+
+.mode-icon {
+    width: 24px;
+    height: 24px;
+}
+
 .upload-area {
     display: flex;
     flex-direction: column;
@@ -210,6 +262,52 @@ body {
 }
 
 /* Settings */
+.preset-buttons {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--spacing-sm);
+    margin-bottom: var(--spacing-sm);
+}
+
+.preset-button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: var(--spacing-md);
+    border: 2px solid var(--border-color);
+    background: var(--background);
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    transition: all 0.2s;
+    font-family: var(--font-system);
+}
+
+.preset-button:hover {
+    border-color: var(--primary-color);
+    background: rgba(0, 122, 255, 0.05);
+}
+
+.preset-button.active {
+    border-color: var(--primary-color);
+    background: rgba(0, 122, 255, 0.1);
+}
+
+.preset-button:active {
+    transform: scale(0.98);
+}
+
+.preset-name {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 2px;
+}
+
+.preset-desc {
+    font-size: 13px;
+    color: var(--text-tertiary);
+}
+
 .setting-group {
     margin-bottom: var(--spacing-lg);
 }
@@ -409,6 +507,12 @@ body {
     margin-top: var(--spacing-md);
 }
 
+.loading-progress {
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 15px;
+    margin-top: var(--spacing-xs);
+}
+
 /* Error Toast */
 .error-toast {
     position: fixed;
@@ -474,6 +578,10 @@ body {
     
     .glass-card {
         padding: var(--spacing-xl);
+    }
+    
+    .preset-buttons {
+        grid-template-columns: repeat(4, 1fr);
     }
     
     .action-buttons {
