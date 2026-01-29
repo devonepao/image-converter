@@ -1,7 +1,7 @@
 {
-  "name": "Image Converter - WebP",
+  "name": "Image Converter - WebP & HEIC",
   "short_name": "Image Converter",
-  "description": "Convert images to WebP format with Apple Design System",
+  "description": "Convert images to WebP format with HEIC support. Supports single images and batch ZIP processing.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#F2F2F7",
