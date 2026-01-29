@@ -31,7 +31,7 @@ self.addEventListener('install', (event) => {
         console.log('Opened cache');
         // Cache local resources
         await cache.addAll(urlsToCache);
-        // Cache external libraries (with no-cors for cross-origin)
+        // Cache external libraries for cross-origin CORS-enabled resources
         for (const url of externalLibraries) {
           try {
             const response = await fetch(url, { mode: 'cors' });
