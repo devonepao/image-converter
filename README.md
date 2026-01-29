@@ -1,17 +1,18 @@
-# Image Converter - WebP PWA
+# Image Converter - WebP & HEIC PWA
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![PWA](https://img.shields.io/badge/PWA-Enabled-brightgreen.svg)](https://developers.google.com/web/progressive-web-apps/)
 [![Made with Love](https://img.shields.io/badge/Made%20with-%E2%9D%A4-red.svg)](https://github.com/devonepao/image-converter)
 
-A powerful Progressive Web App (PWA) for converting images to WebP format with support for batch processing via ZIP files. Built following Apple's Human Interface Guidelines for a clean, intuitive user experience.
+A powerful Progressive Web App (PWA) for converting images to WebP format with full HEIC/HEIF support and batch processing via ZIP files. Built following Apple's Human Interface Guidelines for a clean, intuitive user experience.
 
 ## ✨ Features
 
-- 🖼️ **Universal Image Support**: Convert JPG, PNG, GIF, BMP, and TIFF to WebP
-- 📦 **Batch Processing**: Upload ZIP files with multiple images and get back a ZIP with converted images
+- 🖼️ **Universal Image Support**: Convert JPG, PNG, GIF, BMP, TIFF, and **HEIC/HEIF** to WebP
+- 📱 **HEIC Support**: Full support for Apple's HEIC format from iPhones and iPads
+- 📦 **Batch Processing**: Upload ZIP files with multiple images (including HEIC) and get back a ZIP with converted WebP images
 - ⚙️ **Flexible Quality Settings**: Choose from presets (Low, Medium, High, Maximum) or fine-tune with custom quality slider
-- 📐 **Image Resizing**: Optionally resize images during conversion
+- 📐 **Image Resizing**: Optionally resize images during conversion with aspect ratio preservation
 - 📱 **Responsive Design**: Optimized for both desktop and mobile devices
 - 🎨 **Apple Design System**: Clean interface with glassmorphism effects and SF Pro Display font
 - ⚡ **Fast & Offline**: Works offline as a PWA with service worker caching
@@ -81,6 +82,7 @@ php -S localhost:8000
 - **CSS3**: Modern styling with CSS Grid, Flexbox, and CSS Variables
 - **JavaScript (ES6+)**: Vanilla JS with async/await and modern APIs
 - **Canvas API**: For image processing and WebP conversion
+- **heic2any**: For HEIC/HEIF image conversion support
 - **JSZip**: For handling ZIP file extraction and creation
 - **Service Worker**: For offline functionality and caching
 - **PWA Manifest**: For installable app experience
@@ -191,6 +193,7 @@ SOFTWARE.
 
 ## 🙏 Acknowledgments
 
+- [heic2any](https://github.com/nicklynj/heic2any) - For HEIC/HEIF image conversion
 - [JSZip](https://stuk.github.io/jszip/) - For ZIP file handling
 - [Canvas API](https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API) - For image processing
 - [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/) - For design inspiration
