@@ -221,11 +221,11 @@ function switchUploadMode(mode) {
     if (mode === 'zip') {
         elements.fileInput.setAttribute('accept', '.zip,application/zip');
         elements.uploadText.textContent = 'Tap to upload ZIP file';
-        elements.uploadHint.textContent = 'ZIP archive containing PNG, JPEG, JPG images';
+        elements.uploadHint.textContent = 'ZIP archive containing PNG, JPEG/JPG images';
     } else {
         elements.fileInput.setAttribute('accept', 'image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg,.heic,.heif');
         elements.uploadText.textContent = 'Tap to upload image';
-        elements.uploadHint.textContent = 'Supports PNG, JPEG, JPG, HEIC';
+        elements.uploadHint.textContent = 'Supports PNG, JPEG/JPG, HEIC';
     }
     
     // Reset if mode changed
