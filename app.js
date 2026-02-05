@@ -40,11 +40,14 @@ const elements = {
     singleModeBtn: document.getElementById('singleModeBtn'),
     zipModeBtn: document.getElementById('zipModeBtn'),
     uploadText: document.getElementById('uploadText'),
-    uploadHint: document.getElementById('uploadHint')
+    uploadHint: document.getElementById('uploadHint'),
+    themeToggle: document.getElementById('themeToggle')
 };
 
 // Initialize App
 function init() {
+    // Initialize theme
+    initTheme();
     // Check WebP support
     checkWebPSupport();
     // Check HEIC support
@@ -59,6 +62,45 @@ function updateFooterYear() {
     const footerText = document.getElementById('footerText');
     const currentYear = new Date().getFullYear();
     footerText.textContent = `© ${currentYear} a solvepao research product`;
+}
+
+// Theme Management
+function initTheme() {
+    // Get saved theme from localStorage or use system preference
+    const savedTheme = localStorage.getItem('theme');
+    
+    if (savedTheme) {
+        // Use saved theme
+        document.documentElement.setAttribute('data-theme', savedTheme);
+    } else {
+        // Check system preference
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        // Don't set attribute, let CSS handle system preference
+        if (prefersDark) {
+            document.documentElement.removeAttribute('data-theme');
+        }
+    }
+}
+
+function toggleTheme() {
+    const currentTheme = document.documentElement.getAttribute('data-theme');
+    let newTheme;
+    
+    if (currentTheme === 'dark') {
+        // Switch to light
+        newTheme = 'light';
+    } else if (currentTheme === 'light') {
+        // Switch to dark
+        newTheme = 'dark';
+    } else {
+        // No theme set, check system preference and toggle
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        newTheme = prefersDark ? 'light' : 'dark';
+    }
+    
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('theme', newTheme);
+    hapticFeedback();
 }
 
 // Check WebP Support
@@ -97,6 +139,9 @@ async function registerServiceWorker() {
 
 // Event Listeners
 function setupEventListeners() {
+    // Theme toggle
+    elements.themeToggle.addEventListener('click', toggleTheme);
+    
     // Upload mode selection
     elements.singleModeBtn.addEventListener('click', () => switchUploadMode('single'));
     elements.zipModeBtn.addEventListener('click', () => switchUploadMode('zip'));
@@ -176,11 +221,11 @@ function switchUploadMode(mode) {
     if (mode === 'zip') {
         elements.fileInput.setAttribute('accept', '.zip,application/zip');
         elements.uploadText.textContent = 'Tap to upload ZIP file';
-        elements.uploadHint.textContent = 'ZIP archive containing images';
+        elements.uploadHint.textContent = 'ZIP archive containing PNG, JPEG, JPG images';
     } else {
-        elements.fileInput.setAttribute('accept', 'image/*,.heic,.heif');
+        elements.fileInput.setAttribute('accept', 'image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg,.heic,.heif');
         elements.uploadText.textContent = 'Tap to upload image';
-        elements.uploadHint.textContent = 'Supports JPG, PNG, GIF, BMP, TIFF, HEIC';
+        elements.uploadHint.textContent = 'Supports PNG, JPEG, JPG, HEIC';
     }
     
     // Reset if mode changed
@@ -820,14 +865,18 @@ function formatFileSize(bytes) {
     return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
 }
 
-// Get File Name (without extension)
+// Get File Name (without extension) and sanitize spaces
 function getFileName(filename) {
     const lastDotIndex = filename.lastIndexOf('.');
+    let name;
     if (lastDotIndex <= 0) {
         // No extension or filename starts with dot (e.g., ".gitignore")
-        return filename;
+        name = filename;
+    } else {
+        name = filename.substring(0, lastDotIndex);
     }
-    return filename.substring(0, lastDotIndex);
+    // Replace spaces with hyphens
+    return name.replace(/\s+/g, '-');
 }
 
 // Show Loading
