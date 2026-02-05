@@ -797,8 +797,16 @@ function handleDownload() {
     if (state.uploadMode === 'zip') {
         a.download = state.zipFileName + '_converted.zip';
     } else if (state.usedOriginal) {
-        // Keep the original filename if we're using the original file
-        a.download = state.originalFile.name;
+        // Keep the original filename but replace spaces with hyphens
+        const fileName = state.originalFile.name;
+        const lastDotIndex = fileName.lastIndexOf('.');
+        if (lastDotIndex > 0) {
+            const name = fileName.substring(0, lastDotIndex).replace(/\s+/g, '-');
+            const ext = fileName.substring(lastDotIndex);
+            a.download = name + ext;
+        } else {
+            a.download = fileName.replace(/\s+/g, '-');
+        }
     } else {
         // Use .webp extension for converted images
         a.download = getFileName(state.originalFile.name) + '.webp';
