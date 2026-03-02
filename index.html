@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <meta name="description" content="Convert images to WebP format - Supports PNG, JPEG, JPG, HEIC and batch ZIP processing">
+    <meta name="description" content="Convert images to WebP, JPEG, PNG, and JXL format - Supports PNG, JPEG, JPG, HEIC and batch ZIP processing">
     <meta name="theme-color" content="#007AFF">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <meta name="apple-mobile-web-app-title" content="Image Converter">
     
-    <title>Image Converter - WebP & HEIC</title>
+    <title>Image Converter - WebP, JXL & HEIC</title>
     
     <!-- PWA Manifest -->
     <link rel="manifest" href="manifest.json">
@@ -27,7 +27,7 @@
             <div class="header-content">
                 <div class="header-text">
                     <h1 class="app-title">Image Converter</h1>
-                    <p class="app-subtitle">HEIC & WebP Support</p>
+                    <p class="app-subtitle">WebP, JXL & HEIC Support</p>
                 </div>
                 <button id="themeToggle" class="theme-toggle" aria-label="Toggle theme">
                     <svg class="theme-icon sun-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -156,8 +156,19 @@
                             <line x1="15" y1="15" x2="21" y2="21"></line>
                             <line x1="4" y1="4" x2="9" y2="9"></line>
                         </svg>
-                        Convert to WebP
+                        <span id="convertButtonText">Compare Formats</span>
                     </button>
+                </div>
+            </section>
+
+            <!-- Format Comparison Section (single image mode) -->
+            <section class="comparison-section" id="comparisonSection" style="display: none;">
+                <div class="glass-card">
+                    <h2 class="section-title">Format Comparison</h2>
+                    <p class="section-description" id="comparisonDesc">Compare output sizes at the selected quality setting</p>
+                    <div class="comparison-grid" id="comparisonGrid">
+                        <!-- Format cards generated dynamically -->
+                    </div>
                 </div>
             </section>
 
