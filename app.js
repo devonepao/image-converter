@@ -9,7 +9,8 @@ const state = {
     usedOriginal: false,
     uploadMode: 'single', // 'single' or 'zip'
     zipImages: [], // Array of images from zip file
-    zipFileName: ''
+    zipFileName: '',
+    formatComparisons: [] // Array of {format, label, blob, size, error} for single mode
 };
 
 // DOM Elements
@@ -41,7 +42,9 @@ const elements = {
     zipModeBtn: document.getElementById('zipModeBtn'),
     uploadText: document.getElementById('uploadText'),
     uploadHint: document.getElementById('uploadHint'),
-    themeToggle: document.getElementById('themeToggle')
+    themeToggle: document.getElementById('themeToggle'),
+    comparisonSection: document.getElementById('comparisonSection'),
+    comparisonGrid: document.getElementById('comparisonGrid')
 };
 
 // Initialize App
@@ -222,10 +225,12 @@ function switchUploadMode(mode) {
         elements.fileInput.setAttribute('accept', '.zip,application/zip');
         elements.uploadText.textContent = 'Tap to upload ZIP file';
         elements.uploadHint.textContent = 'ZIP archive containing PNG, JPEG/JPG images';
+        document.getElementById('convertButtonText').textContent = 'Convert to WebP';
     } else {
         elements.fileInput.setAttribute('accept', 'image/png,image/jpeg,image/jpg,.png,.jpg,.jpeg,.heic,.heif');
         elements.uploadText.textContent = 'Tap to upload image';
         elements.uploadHint.textContent = 'Supports PNG, JPEG/JPG, HEIC';
+        document.getElementById('convertButtonText').textContent = 'Compare Formats';
     }
     
     // Reset if mode changed
@@ -519,9 +524,9 @@ async function handleConvert() {
     }
 }
 
-// Handle Single Image Convert
+// Handle Single Image Convert — shows format comparison
 async function handleSingleConvert() {
-    showLoading('Converting image...');
+    showLoading('Comparing formats...');
     
     try {
         // Get resize dimensions with validation and aspect ratio preservation
@@ -533,7 +538,6 @@ async function handleSingleConvert() {
         const hasHeight = elements.resizeHeight.value && parseInt(elements.resizeHeight.value) > 0;
         
         if (hasWidth && hasHeight) {
-            // Both dimensions provided
             const parsedWidth = parseInt(elements.resizeWidth.value);
             const parsedHeight = parseInt(elements.resizeHeight.value);
             if (parsedWidth <= 10000 && parsedHeight <= 10000) {
@@ -541,14 +545,12 @@ async function handleSingleConvert() {
                 height = parsedHeight;
             }
         } else if (hasWidth) {
-            // Only width provided, calculate height to maintain aspect ratio
             const parsedWidth = parseInt(elements.resizeWidth.value);
             if (parsedWidth > 0 && parsedWidth <= 10000) {
                 width = parsedWidth;
                 height = Math.round(parsedWidth / aspectRatio);
             }
         } else if (hasHeight) {
-            // Only height provided, calculate width to maintain aspect ratio
             const parsedHeight = parseInt(elements.resizeHeight.value);
             if (parsedHeight > 0 && parsedHeight <= 10000) {
                 height = parsedHeight;
@@ -556,42 +558,35 @@ async function handleSingleConvert() {
             }
         }
         
-        // Convert to WebP
-        let blob = await convertToWebP(state.originalImage, width, height, state.quality);
+        // Generate comparisons for all formats
+        updateLoadingProgress('WebP · JPEG · PNG · JXL');
+        const comparisons = await generateFormatComparisons(
+            state.originalImage, width, height, state.quality
+        );
+        state.formatComparisons = comparisons;
         
-        // Check if the converted image is larger than the original
-        if (blob.size > state.originalFile.size) {
-            blob = state.originalFile;
-            state.usedOriginal = true;
-        } else {
+        // Use the smallest valid result as the default convertedBlob (for backward compat)
+        const valid = comparisons.filter(c => c.blob);
+        if (valid.length > 0) {
+            const best = valid.reduce((a, b) => b.size < a.size ? b : a);
+            state.convertedBlob = best.blob;
             state.usedOriginal = false;
         }
         
-        state.convertedBlob = blob;
+        // Display comparison
+        displayFormatComparisons(comparisons, state.originalFile.size, width, height);
         
-        // Display result
-        const url = URL.createObjectURL(blob);
-        elements.convertedImage.src = url;
-        elements.convertedSize.textContent = formatFileSize(blob.size);
-        
-        // Calculate savings
-        if (state.usedOriginal) {
-            elements.savings.textContent = 'Original kept (WebP was larger)';
-        } else {
-            const savings = ((1 - blob.size / state.originalFile.size) * 100).toFixed(1);
-            elements.savings.textContent = `${savings}% smaller`;
-        }
-        
-        // Show result section
-        elements.resultSection.style.display = 'block';
-        elements.resultSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        // Show comparison section, hide old result section
+        elements.comparisonSection.style.display = 'block';
+        elements.resultSection.style.display = 'none';
+        elements.comparisonSection.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         
         hideLoading();
         hapticFeedback();
         
     } catch (error) {
         hideLoading();
-        showError('Error converting image: ' + error.message);
+        showError('Error comparing formats: ' + error.message);
     }
 }
 
@@ -753,35 +748,182 @@ async function handleBatchConvert() {
     }
 }
 
-// Convert to WebP
-function convertToWebP(img, width, height, quality) {
+// Convert to any canvas-supported format (image/webp, image/jpeg, image/png)
+function convertToCanvasFormat(img, width, height, quality, mimeType) {
     return new Promise((resolve, reject) => {
         try {
-            // Create canvas
             const canvas = document.createElement('canvas');
             canvas.width = width;
             canvas.height = height;
-            
-            // Draw image
             const ctx = canvas.getContext('2d');
             ctx.drawImage(img, 0, 0, width, height);
-            
-            // Convert to WebP
             canvas.toBlob(
                 (blob) => {
-                    if (blob) {
-                        resolve(blob);
-                    } else {
-                        reject(new Error('Failed to convert image'));
-                    }
+                    if (blob) resolve(blob);
+                    else reject(new Error('Failed to convert image'));
                 },
-                'image/webp',
+                mimeType,
                 quality / 100
             );
         } catch (error) {
             reject(error);
         }
     });
+}
+
+// Convert to JXL — tries native canvas first, falls back to @jsquash/jxl WASM
+async function convertToJXL(img, width, height, quality) {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, width, height);
+
+    // Try native browser JXL encoding (Chrome 110+ with flag, future browsers)
+    const nativeBlob = await new Promise(resolve => {
+        canvas.toBlob(resolve, 'image/jxl', quality / 100);
+    });
+    if (nativeBlob && nativeBlob.type === 'image/jxl') {
+        return nativeBlob;
+    }
+
+    // Fall back to @jsquash/jxl WASM library
+    try {
+        const jxlModule = await import('https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/+esm');
+        // Explicitly initialize the encoder WASM so it loads from the correct CDN path
+        if (typeof jxlModule.init === 'function') {
+            await jxlModule.init(
+                'https://cdn.jsdelivr.net/npm/@jsquash/jxl@1.3.0/codec/enc/jxl_enc.wasm'
+            );
+        }
+        const imageData = ctx.getImageData(0, 0, width, height);
+        const buffer = await jxlModule.encode(imageData, { quality: quality });
+        return new Blob([buffer], { type: 'image/jxl' });
+    } catch (error) {
+        throw new Error('JXL encoding not supported in this browser: ' + error.message);
+    }
+}
+
+// Generate format comparisons for all supported output types
+async function generateFormatComparisons(img, width, height, quality) {
+    const formats = [
+        { id: 'webp', label: 'WebP',  mime: 'image/webp' },
+        { id: 'jpeg', label: 'JPEG',  mime: 'image/jpeg' },
+        { id: 'png',  label: 'PNG',   mime: 'image/png'  },
+        { id: 'jxl',  label: 'JXL',   mime: 'image/jxl'  }
+    ];
+
+    // Convert all formats in parallel for faster processing
+    const results = await Promise.all(formats.map(async fmt => {
+        try {
+            const blob = fmt.id === 'jxl'
+                ? await convertToJXL(img, width, height, quality)
+                : await convertToCanvasFormat(img, width, height, quality, fmt.mime);
+            return { format: fmt.id, label: fmt.label, blob, size: blob.size, error: null };
+        } catch (err) {
+            return { format: fmt.id, label: fmt.label, blob: null, size: null, error: err.message };
+        }
+    }));
+    return results;
+}
+
+// Render comparison cards into the comparison grid
+function displayFormatComparisons(comparisons, originalSize, width, height) {
+    const grid = elements.comparisonGrid;
+    // Revoke any previous object URLs to avoid memory leaks
+    grid.querySelectorAll('img[data-object-url]').forEach(img => {
+        URL.revokeObjectURL(img.src);
+    });
+    grid.innerHTML = '';
+
+    // Find best (smallest) format to highlight it
+    const valid = comparisons.filter(c => c.blob);
+    const bestSize = valid.length > 0 ? Math.min(...valid.map(c => c.size)) : null;
+
+    comparisons.forEach(c => {
+        const card = document.createElement('div');
+        card.className = 'format-card';
+        if (c.blob && c.size === bestSize) card.classList.add('best-format');
+
+        if (c.error) {
+            const header = document.createElement('div');
+            header.className = 'format-card-header';
+            const badge = document.createElement('span');
+            badge.className = `format-badge format-badge-${c.format}`;
+            badge.textContent = c.label;
+            header.appendChild(badge);
+
+            const unavail = document.createElement('div');
+            unavail.className = 'format-unavailable';
+            const msg1 = document.createElement('p');
+            msg1.textContent = 'Not available';
+            const msg2 = document.createElement('p');
+            msg2.className = 'format-error-msg';
+            msg2.textContent = c.format === 'jxl'
+                ? 'JXL not supported in this browser'
+                : 'Encoding failed';
+            unavail.appendChild(msg1);
+            unavail.appendChild(msg2);
+
+            card.appendChild(header);
+            card.appendChild(unavail);
+        } else {
+            const savings = ((1 - c.size / originalSize) * 100).toFixed(1);
+            const savingsClass = parseFloat(savings) >= 0 ? 'savings-positive' : 'savings-negative';
+            const savingsText = parseFloat(savings) >= 0
+                ? `${savings}% smaller`
+                : `${Math.abs(parseFloat(savings)).toFixed(1)}% larger`;
+            const previewUrl = URL.createObjectURL(c.blob);
+            const bestBadge = (c.size === bestSize) ? '<span class="best-badge">Best</span>' : '';
+            card.innerHTML = `
+                <div class="format-card-header">
+                    <span class="format-badge format-badge-${c.format}">${c.label}</span>
+                    ${bestBadge}
+                </div>
+                <img class="format-preview" src="${previewUrl}" alt="${c.label} preview" data-object-url="1">
+                <div class="format-info">
+                    <div class="format-size">${formatFileSize(c.size)}</div>
+                    <div class="format-savings ${savingsClass}">${savingsText}</div>
+                    <div class="format-dimensions">${width} × ${height}</div>
+                </div>
+                <button class="secondary-button download-format-btn" data-format="${c.format}">
+                    Download ${c.label}
+                </button>`;
+        }
+        grid.appendChild(card);
+    });
+
+    // Wire up download buttons
+    const FORMAT_EXT = { webp: 'webp', jpeg: 'jpg', png: 'png', jxl: 'jxl' };
+    grid.querySelectorAll('.download-format-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const fmt = btn.dataset.format;
+            const match = comparisons.find(c => c.format === fmt);
+            if (match && match.blob) {
+                const ext = FORMAT_EXT[fmt] || fmt;
+                downloadBlob(match.blob, getFileName(state.originalFile.name) + '.' + ext);
+            }
+        });
+    });
+}
+
+// Generic blob download helper
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    const CLEANUP_DELAY = 100;
+    setTimeout(() => URL.revokeObjectURL(url), CLEANUP_DELAY);
+    hapticFeedback();
+}
+
+// Convert to WebP
+function convertToWebP(img, width, height, quality) {
+    return convertToCanvasFormat(img, width, height, quality, 'image/webp');
 }
 
 // Handle Download
@@ -835,6 +977,7 @@ function handleReset() {
     state.usedOriginal = false;
     state.zipImages = [];
     state.zipFileName = '';
+    state.formatComparisons = [];
     
     // Reset UI
     elements.fileInput.value = '';
@@ -848,10 +991,19 @@ function handleReset() {
         button.classList.toggle('active', parseInt(button.dataset.quality) === 80);
     });
     
+    // Revoke any open object URLs in the comparison grid
+    if (elements.comparisonGrid) {
+        elements.comparisonGrid.querySelectorAll('img[data-object-url]').forEach(img => {
+            URL.revokeObjectURL(img.src);
+        });
+        elements.comparisonGrid.innerHTML = '';
+    }
+    
     // Hide sections
     elements.previewSection.style.display = 'none';
     elements.settingsSection.style.display = 'none';
     elements.resultSection.style.display = 'none';
+    elements.comparisonSection.style.display = 'none';
     
     // Scroll to top
     window.scrollTo({ top: 0, behavior: 'smooth' });
